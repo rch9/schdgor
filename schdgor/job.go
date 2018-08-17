@@ -11,18 +11,34 @@ const (
 // ticker should be out of the job, another struct?
 // or may be job should be an interface?
 type Job struct {
-	Name string
+	name string
 	// At      time.Time
 	// chan as status?
 	// ticker  time.Ticker
 	status  string
-	Delay   time.Duration
-	Period  time.Duration
-	Handler func()
+	delay   time.Duration
+	period  time.Duration
+	handler func()
 	// work chan Duration?
 	// pause chan
 	stop chan struct{}
 	// Handler func(context.Context) error
+}
+
+func (j *Job) Name() string {
+	return j.name
+}
+
+func NewJob(name string, handler func(), delay, period time.Duration) *Job {
+	j := Job{
+		name:    name,
+		handler: handler,
+		delay:   delay,
+		period:  period,
+		stop:    make(chan struct{}, 1),
+	}
+
+	return &j
 }
 
 // func (j *Job) SetDelay(dl time.Duration)  {

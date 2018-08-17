@@ -1,118 +1,127 @@
 package schdgor
 
-// TODO: fix job in runtime
-
 import (
 	"fmt"
-	"log"
 	"time"
 )
 
-// sc.Start().WithDelay().Periodically()
+// jobsPool is an alias for map[string]*Job
+type jobsPool map[string]*Job
 
-type JobsPool map[string]*Job
-
-//
+// Scheduler manages jobs which run in gorutines
+// it stores jobs into jobsPool
 type Scheduler struct {
-	JobsPool JobsPool
+	jobsPool jobsPool
 }
 
 // New creates new Scheduler
 func New() *Scheduler {
 	sc := new(Scheduler)
-	sc.JobsPool = JobsPool{}
+	sc.jobsPool = jobsPool{}
 
 	return sc
 }
 
-func (p JobsPool) WithStatus(s string) {
+// JobsPool returns copy of jobsPool
+func (sc *Scheduler) JobsPool() jobsPool {
+	return sc.jobsPool
+}
+
+// WithStatus filters jobs by their status (Ready/Running/Stopped)
+func (p jobsPool) WithStatus(s string) jobsPool {
+	var res []*Job
 	for _, j := range p {
-		if j.status != s {
-			delete(p, j.Name)
+		if j.status == s {
+			res = append(res, j)
 		}
 	}
+	return p
 }
 
-func (sc *Scheduler) Add(jobs ...Job) {
+// Add adds pointers of jobs into scheduler jobsPool
+func (sc *Scheduler) Add(jobs ...*Job) {
 	for _, j := range jobs {
-		sc.JobsPool[j.Name] = &j
-		(&j).status = StatReady
+		j.status = StatReady
+		sc.jobsPool[j.name] = j
 	}
 }
 
-// check errors
-// Should i return error?
-func (sc *Scheduler) Start(jn string) {
-	j, ok := sc.JobsPool[jn]
+// TODO: : Should i return error?
+// Start runs specific job by its name
+func (sc *Scheduler) Start(jn string) error {
+	j, ok := sc.jobsPool[jn]
 	if !ok {
-		log.Printf("Can not find job %s", jn)
-		return
+		return fmt.Errorf("can not find job %s", jn)
 	}
 
-	// j.ticker = *time.NewTicker(j.Period) // time.Tick()
-	// FIXME: check memory
-	tick := time.Tick(j.Period)
-	j.stop = make(chan struct{}, 1)
-	fmt.Println(j.stop)
+	j.status = StatRunning
+	ticker := time.NewTicker(j.period)
 	go func() {
 		for {
 			select {
-			// TODO: why a can not close it?
-			case res := <-tick:
-				j.Handler()
-				fmt.Println(res)
+			case <-ticker.C:
+				j.handler()
 			case <-j.stop:
-				fmt.Println("done")
+				ticker.Stop()
 				return
 			}
 		}
-
 	}()
-}
-
-func (sc *Scheduler) StartAll() {
-
-}
-
-// Should i return error?
-func (sc *Scheduler) Stop(jn string) error {
-	// fmt.Println("called Stop")
-	j, ok := sc.JobsPool[jn]
-	if !ok {
-		return fmt.Errorf("error....")
-	}
-
-	fmt.Println(j.stop)
-	j.stop <- struct{}{}
-	close(j.stop)
 
 	return nil
-	// close(j.done)
-	// j.ticker.Stop()
-	// fmt.Println("called Stop")
 }
 
-func (sc *Scheduler) StopAll() {
-	for _, j := range sc.JobsPool {
-		fmt.Println(j.Name)
+// StartAll starts all jobs in jobsPool
+func (sc *Scheduler) StartAll() {
+	for _, j := range sc.jobsPool {
+		// TODO: what if gorutine have already Running
+		sc.Start(j.name)
 	}
 }
 
-func (sc *Scheduler) Remove(jn string) {
-	// TODO: firstly stop
-	delete(sc.JobsPool, jn)
+// TODO: what if gorutine have already Stopped
+// Stop stops specific job by its name
+func (sc *Scheduler) Stop(jn string) error {
+	j, ok := sc.jobsPool[jn]
+	if !ok {
+		return fmt.Errorf("can not find job %s", jn)
+	}
+
+	j.stop <- struct{}{}
+	j.status = StatStopped
+	close(j.stop)
+	return nil
 }
 
+// StartAll starts all jobs in jobsPool
+func (sc *Scheduler) StopAll() {
+	for _, j := range sc.jobsPool {
+		fmt.Println(j.name)
+	}
+}
+
+// //
+// func (sc *Scheduler) Modify(jn) error {
+// 	_, ok := sc.jobsPool[jn]
+// 	if !ok {
+// 		return fmt.Errorf("can not find job %s", jn)
+// 	}
+// }
+
+// Remove removes specific job by its name
+func (sc *Scheduler) Remove(jn string) error {
+	_, ok := sc.jobsPool[jn]
+	if !ok {
+		return fmt.Errorf("can not find job %s", jn)
+	}
+	sc.Stop(jn)
+	delete(sc.jobsPool, jn)
+	return nil
+}
+
+// RemoveAll removes all jobs in jobsPool
 func (sc *Scheduler) RemoveAll() {
-	// for _, j := range sc.JobsPool {
-	//
-	// }
+	for _, j := range sc.jobsPool {
+		sc.Remove(j.name)
+	}
 }
-
-// func (sc *Scheduler) Pause(jn string) {
-//
-// }
-//
-// func (sc *Scheduler) PauseAll() {
-//
-// }
