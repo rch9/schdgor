@@ -2,6 +2,12 @@ package schdgor
 
 import "time"
 
+const (
+	StatReady   = "Ready"
+	StatStopped = "Stopped"
+	StatRunning = "Running"
+)
+
 // ticker should be out of the job, another struct?
 // or may be job should be an interface?
 type Job struct {
@@ -9,7 +15,7 @@ type Job struct {
 	// At      time.Time
 	// chan as status?
 	// ticker  time.Ticker
-	status  int8
+	status  string
 	Delay   time.Duration
 	Period  time.Duration
 	Handler func()
@@ -23,16 +29,16 @@ type Job struct {
 // 	delay = dl
 // }
 
-func (j *Job) Status() string {
-	switch j.status {
-	case 0:
-		return "Ready"
-	case 1:
-		return "Running"
-	default:
-		return "Stopped"
-	}
-}
+// func (j *Job) Status() string {
+// 	switch j.status {
+// 	case 0:
+// 		return "Ready"
+// 	case 1:
+// 		return "Running"
+// 	default:
+// 		return "Stopped"
+// 	}
+// }
 
 // schedule
 
@@ -40,11 +46,11 @@ func (j *Job) Status() string {
 //
 // }
 
-type JobWrap struct {
-	Delay  time.Duration
-	Period time.Duration
-
-	Job Job
-}
+// type JobWrap struct {
+// 	Delay  time.Duration
+// 	Period time.Duration
+//
+// 	Job Job
+// }
 
 // https://stackoverflow.com/questions/3073948/job-task-and-process-whats-the-difference#3073961

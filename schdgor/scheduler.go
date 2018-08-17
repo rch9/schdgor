@@ -1,37 +1,54 @@
 package schdgor
 
+// TODO: fix job in runtime
+
 import (
 	"fmt"
+	"log"
 	"time"
 )
 
 // sc.Start().WithDelay().Periodically()
 
+type JobsPool map[string]*Job
+
+//
 type Scheduler struct {
-	JobsPool map[string]*Job
+	JobsPool JobsPool
 }
 
+// New creates new Scheduler
 func New() *Scheduler {
 	sc := new(Scheduler)
-	sc.JobsPool = map[string]*Job{}
-	// fmt.Println(sc)
+	sc.JobsPool = JobsPool{}
+
 	return sc
+}
+
+func (p JobsPool) WithStatus(s string) {
+	for _, j := range p {
+		if j.status != s {
+			delete(p, j.Name)
+		}
+	}
 }
 
 func (sc *Scheduler) Add(jobs ...Job) {
 	for _, j := range jobs {
 		sc.JobsPool[j.Name] = &j
+		(&j).status = StatReady
 	}
 }
 
-// TODO: check empty struct
-// func start() chan bool {
-//
-// }
-
 // check errors
+// Should i return error?
 func (sc *Scheduler) Start(jn string) {
-	j := sc.JobsPool[jn]
+	j, ok := sc.JobsPool[jn]
+	if !ok {
+		log.Printf("Can not find job %s", jn)
+		return
+	}
+
 	// j.ticker = *time.NewTicker(j.Period) // time.Tick()
 	// FIXME: check memory
 	tick := time.Tick(j.Period)
@@ -57,33 +74,45 @@ func (sc *Scheduler) StartAll() {
 
 }
 
-func (sc *Scheduler) Stop(jn string) {
-	fmt.Println("called Stop")
-	j := sc.JobsPool[jn]
+// Should i return error?
+func (sc *Scheduler) Stop(jn string) error {
+	// fmt.Println("called Stop")
+	j, ok := sc.JobsPool[jn]
+	if !ok {
+		return fmt.Errorf("error....")
+	}
+
 	fmt.Println(j.stop)
 	j.stop <- struct{}{}
 	close(j.stop)
+
+	return nil
 	// close(j.done)
 	// j.ticker.Stop()
 	// fmt.Println("called Stop")
 }
 
 func (sc *Scheduler) StopAll() {
-
-}
-
-func (sc *Scheduler) Pause(jn string) {
-
-}
-
-func (sc *Scheduler) PauseAll() {
-
+	for _, j := range sc.JobsPool {
+		fmt.Println(j.Name)
+	}
 }
 
 func (sc *Scheduler) Remove(jn string) {
-
+	// TODO: firstly stop
+	delete(sc.JobsPool, jn)
 }
 
 func (sc *Scheduler) RemoveAll() {
-
+	// for _, j := range sc.JobsPool {
+	//
+	// }
 }
+
+// func (sc *Scheduler) Pause(jn string) {
+//
+// }
+//
+// func (sc *Scheduler) PauseAll() {
+//
+// }
