@@ -9,6 +9,15 @@ import (
 
 func main() {
 
+	for {
+		select {
+		case <-stop:
+
+		default:
+			time.Sleep(time.Millisecond * 100)
+		}
+	}
+
 	j1 := schdgor.NewJob("Job-1", func() {
 		fmt.Println("I am job-1")
 	}, 0, time.Second*1)
@@ -18,9 +27,9 @@ func main() {
 	}, 0, time.Second*2)
 
 	sc := schdgor.New()
-	sc.Add(j1, j2)
+	sc.AddJobs(j1, j2)
 	//
-	sc.Start("Job-1")
+	sc.StartJob("Job-1")
 	time.Sleep(time.Second * 4)
 	// fmt.Println(sc.JobsPool)
 	// sc.Stop("Job-1")

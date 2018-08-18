@@ -1,6 +1,7 @@
 package schdgor
 
 import (
+	"context"
 	"log"
 	"time"
 )
@@ -22,12 +23,12 @@ type jobConf struct {
 
 // job represents parameters of running gorutine
 type job struct {
-	name    string
-	status  string
-	handler func()
+	name   string
+	status string
+	// handler func()
 	stop    chan struct{}
 	conf    jobConf
-	// TODO:  Handler func(context.Context) error
+	handler func(context.Context) error
 }
 
 // Name returns job name
@@ -47,7 +48,7 @@ func (j *job) SetConf(delay, period time.Duration) {
 }
 
 // NewJob creates new job with parameters
-func NewJob(name string, handler func(), delay, period time.Duration) *job {
+func NewJob(name string, handler func(context.Context) error, delay, period time.Duration) *job {
 	if delay < 0 {
 		log.Fatal("delay < 0")
 	}

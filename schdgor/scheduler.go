@@ -3,6 +3,7 @@ package schdgor
 // TODO: think about stopping scheduler with chan
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"time"
@@ -15,6 +16,11 @@ type jobsPool map[string]*job
 // it stores jobs into jobsPool
 type Scheduler struct {
 	jobsPool jobsPool
+	stop     chan struct{}
+}
+
+func (sc *Scheduler) Stop() {
+	close(sc.stop)
 }
 
 // New creates new Scheduler
@@ -32,17 +38,17 @@ func (sc *Scheduler) JobsPool() jobsPool {
 
 // WithStatus filters jobs by their status (Ready/Running/Stopped)
 func (p jobsPool) WithStatus(s string) jobsPool { //// TODO: check out tipe
-	var res []*job
+	res := make(jobsPool)
 	for _, j := range p {
 		if j.status == s {
-			res = append(res, j)
+			res[j.name] = j
 		}
 	}
-	return p
+	return res
 }
 
 // Add adds pointers of jobs into scheduler jobsPool
-func (sc *Scheduler) Add(jobs ...*job) {
+func (sc *Scheduler) AddJobs(jobs ...*job) {
 	for _, j := range jobs {
 		j.status = StatReady
 		sc.jobsPool[j.name] = j
@@ -51,7 +57,7 @@ func (sc *Scheduler) Add(jobs ...*job) {
 
 // TODO: check infinity working
 // Start runs specific job by its name
-func (sc *Scheduler) Start(jn string) error {
+func (sc *Scheduler) StartJob(ctx context.Context, jn string) error {
 	j, ok := sc.jobsPool[jn]
 	if !ok {
 		return fmt.Errorf("can not find job %s", jn)
@@ -66,7 +72,7 @@ func (sc *Scheduler) Start(jn string) error {
 			timer := time.NewTimer(j.Conf().Delay)
 			select {
 			case <-timer.C:
-				j.handler()
+				j.handler(ctx)
 				log.Println("timer")
 			}
 		}
@@ -75,7 +81,7 @@ func (sc *Scheduler) Start(jn string) error {
 		for {
 			select {
 			case <-ticker.C:
-				j.handler()
+				j.handler(ctx)
 				log.Println("ticker")
 			case <-j.stop:
 				ticker.Stop()
@@ -87,17 +93,17 @@ func (sc *Scheduler) Start(jn string) error {
 	return nil
 }
 
-// StartAll starts all jobs in jobsPool
-func (sc *Scheduler) StartAll() {
-	for _, j := range sc.jobsPool {
-		if j.status != StatRunning {
-			sc.Start(j.name)
-		}
-	}
-}
+// // StartAll starts all jobs in jobsPool
+// func (sc *Scheduler) StartAllJobs() {
+// 	for _, j := range sc.jobsPool {
+// 		if j.status != StatRunning {
+// 			sc.StartJob(j.name)
+// 		}
+// 	}
+// }
 
 // Stop stops specific job by its name
-func (sc *Scheduler) Stop(jn string) error {
+func (sc *Scheduler) StopJob(ctx context.Context, jn string) error {
 	j, ok := sc.jobsPool[jn]
 	if !ok {
 		return fmt.Errorf("can not find job %s", jn)
@@ -112,14 +118,14 @@ func (sc *Scheduler) Stop(jn string) error {
 	return nil
 }
 
-// StartAll starts all jobs in jobsPool
-func (sc *Scheduler) StopAll() {
-	for _, j := range sc.jobsPool {
-		if j.status == StatRunning {
-			sc.Stop(j.name)
-		}
-	}
-}
+// // StartAll starts all jobs in jobsPool
+// func (sc *Scheduler) StopAllJobs() {
+// 	for _, j := range sc.jobsPool {
+// 		if j.status == StatRunning {
+// 			sc.StopJob(j.name)
+// 		}
+// 	}
+// }
 
 // ModifyJobConf modifies job time configuration
 func (sc *Scheduler) ModifyJobConf(jn string, delay, period time.Duration) error {
@@ -138,19 +144,19 @@ func (sc *Scheduler) ModifyJobConf(jn string, delay, period time.Duration) error
 }
 
 // Remove removes specific job by its name
-func (sc *Scheduler) Remove(jn string) error {
+func (sc *Scheduler) RemoveJob(ctx context.Context, jn string) error {
 	_, ok := sc.jobsPool[jn]
 	if !ok {
 		return fmt.Errorf("can not find job %s", jn)
 	}
-	sc.Stop(jn)
+	sc.StopJob(jn)
 	delete(sc.jobsPool, jn)
 	return nil
 }
 
-// RemoveAll removes all jobs in jobsPool
-func (sc *Scheduler) RemoveAll() {
-	for _, j := range sc.jobsPool {
-		sc.Remove(j.name)
-	}
-}
+// // RemoveAll removes all jobs in jobsPool
+// func (sc *Scheduler) RemoveAllJobs() {
+// 	for _, j := range sc.jobsPool {
+// 		sc.RemoveJob(j.name)
+// 	}
+// }
