@@ -28,9 +28,9 @@ type JobNameKey string
 type job struct {
 	name    JobNameKey
 	status  string
-	stop    chan struct{}
 	conf    jobConf
 	handler func(context.Context) error
+	cancel  context.CancelFunc
 }
 
 // Name returns job name
@@ -55,6 +55,7 @@ func (j *job) SetConf(delay, period time.Duration) {
 
 // NewJob creates new job with parameters
 func NewJob(name string, handler func(context.Context) error, delay, period time.Duration) *job {
+	// TODO: check why one of this works with t <= 0
 	if delay < 0 {
 		log.Fatal("delay < 0")
 	}
@@ -67,7 +68,6 @@ func NewJob(name string, handler func(context.Context) error, delay, period time
 		name:    JobNameKey(name),
 		handler: handler,
 		conf:    jobConf{delay, period},
-		stop:    make(chan struct{}, 1),
 	}
 
 	return &j

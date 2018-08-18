@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 )
 
@@ -15,7 +16,7 @@ type jobsPool map[JobNameKey]*job
 // Scheduler manages jobs which run in gorutines
 type Scheduler struct {
 	jobsPool jobsPool
-	// wg       sync.WaitGroup
+	wg       sync.WaitGroup
 }
 
 // New creates new Scheduler
@@ -27,7 +28,7 @@ func New() *Scheduler {
 }
 
 func (sc *Scheduler) WaitJobs() {
-	// sc.wg.Wait()
+	sc.wg.Wait()
 }
 
 // JobsPool returns copy of jobsPool
@@ -49,7 +50,7 @@ func (p jobsPool) WithStatus(s string) jobsPool { //// TODO: check out tipe
 func (sc *Scheduler) addJob(j *job) {
 	j.status = StatReady
 	sc.jobsPool[j.name] = j
-	// sc.wg.Add(1)
+	sc.wg.Add(1)
 }
 
 // Add adds pointers of jobs into scheduler jobsPool
@@ -61,7 +62,24 @@ func (sc *Scheduler) AddJobs(jobs ...*job) {
 
 // TODO: check infinity working
 // Start runs specific job by its name
-func (sc *Scheduler) StartJob(ctx context.Context, jn string) error {
+// func (sc *Scheduler) StartJob(ctx context.Context, jn string) error {
+// 	j, ok := sc.jobsPool[JobNameKey(jn)]
+// 	if !ok {
+// 		return fmt.Errorf("can not find job %s", jn)
+// 	}
+// 	if j.status == StatRunning {
+// 		return fmt.Errorf("job %s has already running", j.name)
+// 	}
+// 	j.status = StatRunning
+//
+// 	go startJob(ctx, j)
+//
+// 	return nil
+// }
+
+func (sc *Scheduler) StartJob(
+	ctx context.Context, cancel context.CancelFunc, jn string) error {
+
 	j, ok := sc.jobsPool[JobNameKey(jn)]
 	if !ok {
 		return fmt.Errorf("can not find job %s", jn)
@@ -69,39 +87,43 @@ func (sc *Scheduler) StartJob(ctx context.Context, jn string) error {
 	if j.status == StatRunning {
 		return fmt.Errorf("job %s has already running", j.name)
 	}
-
 	j.status = StatRunning
-	go func() {
-		if j.conf.Delay > 0 {
-			timer := time.NewTimer(j.Conf().Delay)
-			select {
-			case <-timer.C:
-				j.handler(ctx)
-				log.Println("timer")
-			case <-ctx.Done():
-				log.Println("canceled")
-				return
-			}
-		}
 
-		ticker := time.NewTicker(j.conf.Period)
-		for {
-			select {
-			case <-ticker.C:
-				j.handler(ctx)
-				log.Println("ticker")
-			case <-j.stop:
-				log.Println("stopped")
-				ticker.Stop()
-				return
-			case <-ctx.Done():
-				log.Println("canceled - 2")
-				return
-			}
-		}
-	}()
+	if cancel == nil {
+		ctx, cancel = context.WithCancel(ctx)
+	}
+	j.cancel = cancel
+
+	go startJob(ctx, j)
 
 	return nil
+}
+
+func startJob(ctx context.Context, j *job) {
+	if j.conf.Delay > 0 {
+		timer := time.NewTimer(j.Conf().Delay)
+		select {
+		case <-timer.C:
+			j.handler(ctx)
+			log.Println("timer")
+		case <-ctx.Done():
+			log.Println("stopped")
+			return
+		}
+	}
+
+	ticker := time.NewTicker(j.conf.Period)
+	for {
+		select {
+		case <-ticker.C:
+			j.handler(ctx)
+			log.Println("ticker")
+		case <-ctx.Done():
+			log.Println("stopped")
+			ticker.Stop()
+			return
+		}
+	}
 }
 
 // // StartAll starts all jobs in jobsPool
@@ -123,12 +145,12 @@ func (sc *Scheduler) StopJob(ctx context.Context, jn string) error {
 		return fmt.Errorf("job %s has already stopped", j.name)
 	}
 
-	j.stop <- struct{}{}
+	j.cancel()
 	j.status = StatStopped
-	close(j.stop)
 	return nil
 }
 
+// TODO: does not work yet
 // // StartAll starts all jobs in jobsPool
 // func (sc *Scheduler) StopAllJobs() {
 // 	for _, j := range sc.jobsPool {
@@ -138,6 +160,7 @@ func (sc *Scheduler) StopJob(ctx context.Context, jn string) error {
 // 	}
 // }
 
+// TODO: does not work yet
 // ModifyJobConf modifies job time configuration
 func (sc *Scheduler) ModifyJobConf(jn string, delay, period time.Duration) error {
 	j, ok := sc.jobsPool[JobNameKey(jn)]
@@ -160,20 +183,11 @@ func (sc *Scheduler) RemoveJob(ctx context.Context, jn string) error {
 	if !ok {
 		return fmt.Errorf("can not find job %s", jn)
 	}
-	// defer sc.wg.Done()
+	defer sc.wg.Done()
 	sc.StopJob(ctx, jn)
 	delete(sc.jobsPool, JobNameKey(jn))
 	return nil
 }
-
-// func (sc *Scheduler) Run()  {
-// 	for{
-// 		select {
-// 		case:
-// 		default:
-// 		}
-// 	}
-// }
 
 // // RemoveAll removes all jobs in jobsPool
 // func (sc *Scheduler) RemoveAllJobs() {

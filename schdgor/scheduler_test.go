@@ -111,7 +111,7 @@ func Test_Scheduler_Start(t *testing.T) {
 
 	ctx := context.Background()
 
-	sc.StartJob(ctx, j1.Name().String())
+	sc.StartJob(ctx, nil, j1.Name().String())
 
 	// sc.WaitJobs()
 }
