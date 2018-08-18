@@ -10,7 +10,7 @@ import (
 )
 
 // jobsPool is an alias for map[string]*Job
-type jobsPool map[string]*job
+type jobsPool map[JobNameKey]*job
 
 // Scheduler manages jobs which run in gorutines
 // it stores jobs into jobsPool
@@ -58,7 +58,7 @@ func (sc *Scheduler) AddJobs(jobs ...*job) {
 // TODO: check infinity working
 // Start runs specific job by its name
 func (sc *Scheduler) StartJob(ctx context.Context, jn string) error {
-	j, ok := sc.jobsPool[jn]
+	j, ok := sc.jobsPool[JobNameKey(jn)]
 	if !ok {
 		return fmt.Errorf("can not find job %s", jn)
 	}
@@ -74,6 +74,9 @@ func (sc *Scheduler) StartJob(ctx context.Context, jn string) error {
 			case <-timer.C:
 				j.handler(ctx)
 				log.Println("timer")
+			case <-ctx.Done():
+				log.Println("canceled")
+				return
 			}
 		}
 
@@ -84,7 +87,11 @@ func (sc *Scheduler) StartJob(ctx context.Context, jn string) error {
 				j.handler(ctx)
 				log.Println("ticker")
 			case <-j.stop:
+				log.Println("stopped")
 				ticker.Stop()
+				return
+			case <-ctx.Done():
+				log.Println("canceled - 2")
 				return
 			}
 		}
@@ -104,7 +111,7 @@ func (sc *Scheduler) StartJob(ctx context.Context, jn string) error {
 
 // Stop stops specific job by its name
 func (sc *Scheduler) StopJob(ctx context.Context, jn string) error {
-	j, ok := sc.jobsPool[jn]
+	j, ok := sc.jobsPool[JobNameKey(jn)]
 	if !ok {
 		return fmt.Errorf("can not find job %s", jn)
 	}
@@ -129,7 +136,7 @@ func (sc *Scheduler) StopJob(ctx context.Context, jn string) error {
 
 // ModifyJobConf modifies job time configuration
 func (sc *Scheduler) ModifyJobConf(jn string, delay, period time.Duration) error {
-	j, ok := sc.jobsPool[jn]
+	j, ok := sc.jobsPool[JobNameKey(jn)]
 	if !ok {
 		return fmt.Errorf("can not find job %s", jn)
 	}
@@ -145,12 +152,12 @@ func (sc *Scheduler) ModifyJobConf(jn string, delay, period time.Duration) error
 
 // Remove removes specific job by its name
 func (sc *Scheduler) RemoveJob(ctx context.Context, jn string) error {
-	_, ok := sc.jobsPool[jn]
+	_, ok := sc.jobsPool[JobNameKey(jn)]
 	if !ok {
 		return fmt.Errorf("can not find job %s", jn)
 	}
-	sc.StopJob(jn)
-	delete(sc.jobsPool, jn)
+	sc.StopJob(ctx, jn)
+	delete(sc.jobsPool, JobNameKey(jn))
 	return nil
 }
 

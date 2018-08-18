@@ -21,9 +21,11 @@ type jobConf struct {
 	// TODO: WorkTime time.Duration
 }
 
+type JobNameKey string
+
 // job represents parameters of running gorutine
 type job struct {
-	name   string
+	name   JobNameKey
 	status string
 	// handler func()
 	stop    chan struct{}
@@ -32,8 +34,12 @@ type job struct {
 }
 
 // Name returns job name
-func (j *job) Name() string {
+func (j *job) Name() JobNameKey {
 	return j.name
+}
+
+func (jk JobNameKey) String() string {
+	return string(jk)
 }
 
 // Conf returns time config of the job
@@ -58,7 +64,7 @@ func NewJob(name string, handler func(context.Context) error, delay, period time
 	}
 
 	j := job{
-		name:    name,
+		name:    JobNameKey(name),
 		handler: handler,
 		conf:    jobConf{delay, period},
 		stop:    make(chan struct{}, 1),
