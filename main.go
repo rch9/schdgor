@@ -9,8 +9,11 @@ import (
 )
 
 func main() {
+	// creating context
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
+
+	// creating jobs
 	j1 := schdgor.NewJob("Job-1", func(context.Context) error {
 		fmt.Println("I am job-1")
 		return nil
@@ -21,23 +24,43 @@ func main() {
 		return nil
 	}, 0, time.Second*2)
 
+	// creting scheduler
 	sc := schdgor.New()
+
+	// adding jobs to scheduler
 	sc.AddJobs(j1, j2)
 
-	sc.StartJob(ctx, j1.Name().String())
-	sc.StartJob(ctx, j2.Name().String())
+	// starting job-1
+	sc.StartJob(ctx, cancel, j1.Name().String())
+	time.Sleep(time.Second * 3)
 
-	time.Sleep(time.Second * 5)
-	cancel()
-	// sc.StopJob(ctx, j1.Name().String())
-	// sc.StopJob(ctx, j2.Name().String())
-	time.Sleep(time.Second * 5)
+	// stopping job-1
+	sc.StopJob(j1.Name().String())
+	time.Sleep(time.Second * 3)
 
-	// sc.WaitJobs()
+	// creating new context because last have already used
+	ctx, cancel = context.WithCancel(context.Background())
 
-	// // fmt.Println(sc.JobsPool)
-	// // sc.Stop("Job-1")
-	// // fmt.Println(sc.JobsPool)
-	// //
-	// // time.Sleep(time.Second * 4)
+	// starting again job-1
+	err := sc.StartJob(ctx, cancel, j1.Name().String())
+	if err != nil {
+		fmt.Println(err)
+	}
+	time.Sleep(time.Second * 3)
+
+	// stopping job-1
+	err = sc.StopJob(j1.Name().String())
+	if err != nil {
+		fmt.Println(err)
+	}
+	time.Sleep(time.Second * 3)
+
+	// remove job-1
+	sc.RemoveJob(j1.Name().String())
+
+	// remove job-2
+	sc.RemoveJob(j2.Name().String())
+
+	// waiting all jobs
+	sc.WaitJobs()
 }

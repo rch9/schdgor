@@ -22,11 +22,12 @@ type jobConf struct {
 	// TODO: WorkTime time.Duration
 }
 
-type JobNameKey string
+// jobNameKey is a type for storing job name in context value
+type jobNameKey string
 
 // job represents parameters of running gorutine
 type job struct {
-	name    JobNameKey
+	name    jobNameKey
 	status  string
 	conf    jobConf
 	handler func(context.Context) error
@@ -34,11 +35,12 @@ type job struct {
 }
 
 // Name returns job name
-func (j *job) Name() JobNameKey {
+func (j *job) Name() jobNameKey {
 	return j.name
 }
 
-func (jk JobNameKey) String() string {
+// String returns job name in string format
+func (jk jobNameKey) String() string {
 	return string(jk)
 }
 
@@ -65,7 +67,7 @@ func NewJob(name string, handler func(context.Context) error, delay, period time
 	}
 
 	j := job{
-		name:    JobNameKey(name),
+		name:    jobNameKey(name),
 		handler: handler,
 		conf:    jobConf{delay, period},
 	}
