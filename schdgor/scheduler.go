@@ -31,7 +31,7 @@ func (sc *Scheduler) JobsPool() jobsPool {
 }
 
 // WithStatus filters jobs by their status (Ready/Running/Stopped)
-func (p jobsPool) WithStatus(s string) jobsPool {
+func (p jobsPool) WithStatus(s string) jobsPool { //// TODO: check out tipe
 	var res []*job
 	for _, j := range p {
 		if j.status == s {
@@ -49,6 +49,7 @@ func (sc *Scheduler) Add(jobs ...*job) {
 	}
 }
 
+// TODO: check infinity working
 // Start runs specific job by its name
 func (sc *Scheduler) Start(jn string) error {
 	j, ok := sc.jobsPool[jn]
@@ -120,6 +121,22 @@ func (sc *Scheduler) StopAll() {
 	}
 }
 
+// ModifyJobConf modifies job time configuration
+func (sc *Scheduler) ModifyJobConf(jn string, delay, period time.Duration) error {
+	j, ok := sc.jobsPool[jn]
+	if !ok {
+		return fmt.Errorf("can not find job %s", jn)
+	}
+	if j.status == StatRunning {
+		return fmt.Errorf("job %s has already running", j.name)
+	}
+
+	// TODO: check tests with stopped
+	j.SetConf(delay, period)
+
+	return nil
+}
+
 // Remove removes specific job by its name
 func (sc *Scheduler) Remove(jn string) error {
 	_, ok := sc.jobsPool[jn]
@@ -137,11 +154,3 @@ func (sc *Scheduler) RemoveAll() {
 		sc.Remove(j.name)
 	}
 }
-
-// //
-// func (sc *Scheduler) Modify(jn) error {
-// 	_, ok := sc.jobsPool[jn]
-// 	if !ok {
-// 		return fmt.Errorf("can not find job %s", jn)
-// 	}
-// }

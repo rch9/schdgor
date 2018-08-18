@@ -16,6 +16,8 @@ const (
 type jobConf struct {
 	Delay  time.Duration
 	Period time.Duration
+	// TODO: Timeout  time.Duration
+	// TODO: WorkTime time.Duration
 }
 
 // job represents parameters of running gorutine
