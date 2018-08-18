@@ -109,32 +109,11 @@ func Test_Scheduler_Start(t *testing.T) {
 	// adding jobs to
 	sc.AddJobs(j1, j2)
 
-	readyjobs := sc.JobsPool().WithStatus(StatReady)
-	assert(t, "ready jobs len", len(readyjobs), 2)
-
 	ctx := context.Background()
 
-	// start job 1
 	sc.StartJob(ctx, j1.Name().String())
 
-	// getting running jobs
-	runningjobs := sc.JobsPool().WithStatus(StatRunning)
-	assert(t, "running jobs len after starting 1", len(runningjobs), 1)
-	assert(t, "running jobs names after starting 1", runningjobs[j1.name].status, StatRunning)
-
-	// getting jobs
-	jobs := sc.JobsPool()
-
-	// testing jobs len
-	assert(t, "len", len(jobs), 2)
-
-	// stopping job-1
-	sc.StopJob(ctx, name1)
-
-	// getting stopped jobs
-	stoppedjobs := sc.JobsPool().WithStatus(StatStopped)
-	assert(t, "stopped jobs len after stopping 1", len(stoppedjobs), 1)
-	assert(t, "stopped jobs names after stopping 1", stoppedjobs[j1.name].status, StatStopped)
+	// sc.WaitJobs()
 }
 
 // func Test_Scheduler_StartAll(t *testing.T) {

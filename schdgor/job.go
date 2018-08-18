@@ -8,9 +8,10 @@ import (
 
 // available states of any job
 const (
-	StatReady   = "Ready"
-	StatStopped = "Stopped"
-	StatRunning = "Running"
+	StatReady    = "Ready"
+	StatStopped  = "Stopped"
+	StatRunning  = "Running"
+	StatCanceled = "Canceled"
 )
 
 // jobConf represents timeconfig of a job
@@ -25,9 +26,8 @@ type JobNameKey string
 
 // job represents parameters of running gorutine
 type job struct {
-	name   JobNameKey
-	status string
-	// handler func()
+	name    JobNameKey
+	status  string
 	stop    chan struct{}
 	conf    jobConf
 	handler func(context.Context) error

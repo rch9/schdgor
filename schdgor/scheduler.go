@@ -13,14 +13,9 @@ import (
 type jobsPool map[JobNameKey]*job
 
 // Scheduler manages jobs which run in gorutines
-// it stores jobs into jobsPool
 type Scheduler struct {
 	jobsPool jobsPool
-	stop     chan struct{}
-}
-
-func (sc *Scheduler) Stop() {
-	close(sc.stop)
+	// wg       sync.WaitGroup
 }
 
 // New creates new Scheduler
@@ -29,6 +24,10 @@ func New() *Scheduler {
 	sc.jobsPool = jobsPool{}
 
 	return sc
+}
+
+func (sc *Scheduler) WaitJobs() {
+	// sc.wg.Wait()
 }
 
 // JobsPool returns copy of jobsPool
@@ -47,11 +46,16 @@ func (p jobsPool) WithStatus(s string) jobsPool { //// TODO: check out tipe
 	return res
 }
 
+func (sc *Scheduler) addJob(j *job) {
+	j.status = StatReady
+	sc.jobsPool[j.name] = j
+	// sc.wg.Add(1)
+}
+
 // Add adds pointers of jobs into scheduler jobsPool
 func (sc *Scheduler) AddJobs(jobs ...*job) {
 	for _, j := range jobs {
-		j.status = StatReady
-		sc.jobsPool[j.name] = j
+		sc.addJob(j)
 	}
 }
 
@@ -156,10 +160,20 @@ func (sc *Scheduler) RemoveJob(ctx context.Context, jn string) error {
 	if !ok {
 		return fmt.Errorf("can not find job %s", jn)
 	}
+	// defer sc.wg.Done()
 	sc.StopJob(ctx, jn)
 	delete(sc.jobsPool, JobNameKey(jn))
 	return nil
 }
+
+// func (sc *Scheduler) Run()  {
+// 	for{
+// 		select {
+// 		case:
+// 		default:
+// 		}
+// 	}
+// }
 
 // // RemoveAll removes all jobs in jobsPool
 // func (sc *Scheduler) RemoveAllJobs() {
