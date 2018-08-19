@@ -22,7 +22,7 @@ func main() {
 	j2 := schdgor.NewJob("Job-2", func(context.Context) error {
 		fmt.Println("I am job-2")
 		return nil
-	}, 0, time.Second*2)
+	}, 0, time.Second*1)
 
 	// creting scheduler
 	sc := schdgor.New()
@@ -44,22 +44,42 @@ func main() {
 	// starting again job-1
 	err := sc.StartJob(ctx, cancel, j1.Name())
 	if err != nil {
-		fmt.Println(err)
+		fmt.Printf("Error: %v", err)
 	}
 	time.Sleep(time.Second * 3)
 
 	// stopping job-1
 	err = sc.StopJob(j1.Name())
 	if err != nil {
-		fmt.Println(err)
+		fmt.Printf("Error: %v", err)
 	}
 	time.Sleep(time.Second * 3)
 
-	// remove job-1
-	sc.RemoveJob(j1.Name())
+	// modify time config for job1
+	err = sc.ModifyJobConf(j1.Name(), time.Second, time.Millisecond*500)
+	if err != nil {
+		fmt.Printf("Error: %v", err)
+	}
 
-	// remove job-2
-	sc.RemoveJob(j2.Name())
+	// run j1 and j2 with same context
+	ctx = context.Background()
+	err = sc.StartJobs(ctx, nil, j1.Name(), j2.Name())
+	if err != nil {
+		fmt.Printf("Error: %v", err)
+	}
+	time.Sleep(time.Second * 3)
+
+	// stop j1, j2 stops automatically because it has same context
+	err = sc.StopJob(j1.Name())
+	if err != nil {
+		fmt.Printf("Error: %v", err)
+	}
+
+	// remove job-1
+	err = sc.RemoveAllJobs()
+	if err != nil {
+		fmt.Printf("Error: %v", err)
+	}
 
 	// waiting all jobs
 	sc.WaitJobs()

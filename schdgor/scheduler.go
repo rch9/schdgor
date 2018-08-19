@@ -63,13 +63,20 @@ func (sc *Scheduler) addJob(j *job) error {
 }
 
 // AddJobs adds pointers of jobs into scheduler jobsPool
-func (sc *Scheduler) AddJobs(jobs ...*job) {
+// jobs with same names in args cause error, adds only first one
+func (sc *Scheduler) AddJobs(jobs ...*job) error {
 	for _, j := range jobs {
-		sc.addJob(j)
+		err := sc.addJob(j)
+		if err != nil {
+			return fmt.Errorf("error in AddJobs: %v", err)
+		}
 	}
+
+	return nil
 }
 
 // StartJobs runs specific jobs by their names with one context and cancel func
+// NOTE: context with timeout cancel ticker after timeout
 func (sc *Scheduler) StartJobs(ctx context.Context,
 	cancel context.CancelFunc, jns ...string) error {
 
@@ -89,7 +96,8 @@ func (sc *Scheduler) StartJobs(ctx context.Context,
 	return nil
 }
 
-// startJob runs specific job by its name
+// StartJob runs specific job by its name
+// NOTE: context with timeout cancel ticker after timeout
 func (sc *Scheduler) StartJob(ctx context.Context,
 	cancel context.CancelFunc, jn string) error {
 
@@ -125,12 +133,11 @@ func (sc *Scheduler) startJob(ctx context.Context, j *job) {
 	if j.conf.Delay > 0 {
 		timer := time.NewTimer(j.Conf().Delay)
 		select {
-		// FIXME: Can i close timer?
+		// TODO: Need i close timer?
 		case <-timer.C:
 			j.handler(ctx)
 		case <-ctx.Done():
-			j.stop()
-			sc.wgjobs.Done()
+			sc.closeJob(j)
 			return
 		}
 	}
@@ -143,16 +150,16 @@ func (sc *Scheduler) startJob(ctx context.Context, j *job) {
 			j.handler(ctx)
 		case <-ctx.Done():
 			ticker.Stop()
-			j.stop()
-			sc.wgjobs.Done()
+			sc.closeJob(j)
 			return
 		}
 	}
 }
 
-func (j *job) stop() {
+// closeJob changes job status and free sc.wgjobs
+func (sc *Scheduler) closeJob(j *job) {
 	j.status = StatStopped
-	// j.done <- struct{}{}
+	sc.wgjobs.Done()
 }
 
 // Stop stops specific job by its name
@@ -168,8 +175,6 @@ func (sc *Scheduler) StopJob(jn string) error {
 
 	j.cancel()
 	sc.wgjobs.Wait()
-	// waiting finishing job
-	// <-j.done
 
 	return nil
 }
@@ -190,6 +195,7 @@ func (sc *Scheduler) RemoveJob(jn string) error {
 }
 
 // ModifyJobConf modifies job time configuration
+// job status changes to modified
 func (sc *Scheduler) ModifyJobConf(jn string, delay, period time.Duration) error {
 	j, ok := sc.jobsPool[string(jn)]
 	if !ok {
@@ -200,22 +206,31 @@ func (sc *Scheduler) ModifyJobConf(jn string, delay, period time.Duration) error
 	}
 
 	j.SetConf(delay, period)
+	j.status = StatModified
 
 	return nil
 }
 
 // // RemoveAll removes all jobs in jobsPool
-func (sc *Scheduler) RemoveAllJobs() {
+func (sc *Scheduler) RemoveAllJobs() error {
 	for _, j := range sc.jobsPool {
-		sc.RemoveJob(j.name)
+		err := sc.RemoveJob(j.name)
+		if err != nil {
+			return fmt.Errorf("error in RemoveAllJobs: %v", err)
+		}
 	}
+	return nil
 }
 
 // StopAllJobs stops all running jobs in jobsPool
-func (sc *Scheduler) StopAllJobs() {
+func (sc *Scheduler) StopAllJobs() error {
 	for _, j := range sc.jobsPool {
 		if j.status == StatRunning {
-			sc.StopJob(j.name)
+			err := sc.StopJob(j.name)
+			if err != nil {
+				return fmt.Errorf("error in StopAllJobs: %v", err)
+			}
 		}
 	}
+	return nil
 }

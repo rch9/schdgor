@@ -63,8 +63,13 @@ func Test_Scheduler_WithStatus(t *testing.T) {
 	// creating scheduler
 	sc := New()
 
-	// adding jobs to
-	sc.AddJobs(j1, j2)
+	// adding same jobs to pool cause error, Second j2 does not added
+	err := sc.AddJobs(j1, j1)
+	assertNotNil(t, "add same jobs", err)
+
+	// add j2
+	err = sc.AddJobs(j2)
+	assert(t, "add jobs", err, nil)
 
 	readyjobs := sc.JobsPool().WithStatus(StatReady)
 	assert(t, "ready jobs len", len(readyjobs), 2)
@@ -74,7 +79,8 @@ func Test_Scheduler_WithStatus(t *testing.T) {
 	ctx, cancel := context.WithCancel(ctx)
 
 	// start job 1
-	sc.StartJob(ctx, cancel, j1.name)
+	err = sc.StartJob(ctx, cancel, j1.name)
+	assert(t, "starting job-1", err, nil)
 
 	// getting running jobs
 	runningjobs := sc.JobsPool().WithStatus(StatRunning)
@@ -88,7 +94,8 @@ func Test_Scheduler_WithStatus(t *testing.T) {
 	assert(t, "len", len(jobs), 2)
 
 	// stopping job-1
-	sc.StopJob(name1)
+	err = sc.StopJob(name1)
+	assert(t, "stopping job-1", err, nil)
 
 	// getting stopped jobs
 	stoppedjobs := sc.JobsPool().WithStatus(StatStopped)
@@ -99,7 +106,7 @@ func Test_Scheduler_WithStatus(t *testing.T) {
 }
 
 // Test_Scheduler_Start_Stop tests StartJobs and StopJob scheduler methods
-func Test_Scheduler_StartJobs_StopJob(t *testing.T) {
+func Test_Scheduler_StartJobs_StopJob_RemoveAllJobs(t *testing.T) {
 	// job names
 	name1, name2 := "Job-1", "Job-2"
 
@@ -118,12 +125,12 @@ func Test_Scheduler_StartJobs_StopJob(t *testing.T) {
 	sc := New()
 
 	// adding jobs to
-	sc.AddJobs(j1, j2)
+	err := sc.AddJobs(j1, j2)
+	assert(t, "add jobs", err, nil)
 
-	// start jobs, cancel func will be created automatically
+	// start jobs, common cancel func will be created automatically
 	ctx := context.Background()
-	ctx, cancel := context.WithCancel(ctx)
-	err := sc.StartJobs(ctx, cancel, j1.Name(), j2.Name())
+	err = sc.StartJobs(ctx, nil, j1.Name(), j2.Name())
 	if err != nil {
 		t.Errorf("error with start jobs: %v", err)
 	}
@@ -136,17 +143,100 @@ func Test_Scheduler_StartJobs_StopJob(t *testing.T) {
 
 	// stopping j1, j2 will be stopped automatically because j1 and j2 has
 	// same CancelFuncs
-	sc.StopJob(j1.Name())
-
-	// time.Sleep(time.Second)
+	err = sc.StopJob(j1.Name())
+	assert(t, "stop job1", err, nil)
 
 	// getting stopped jobs
 	stoppedjobs := sc.JobsPool().WithStatus(StatStopped)
 	assert(t, "stopped jobs len", len(stoppedjobs), 2)
+
+	// removing all jobs from pool
+	err = sc.RemoveAllJobs()
+	assert(t, "remove all jobs", err, nil)
+
+	// checking empty pool of jobs
+	emptypool := sc.JobsPool()
+	assert(t, "empty jobspool len", len(emptypool), 0)
+}
+
+func Test_Scheduler_StartJob_ModifyJobConf_RemoveJob(t *testing.T) {
+	// job names
+	name1 := "Job-1"
+	olddelay, oldperiod := time.Nanosecond, time.Nanosecond
+	newdelay, newperiod := time.Millisecond, time.Millisecond
+
+	// creating job 1
+	j1 := NewJob(name1, func(context.Context) error {
+		fmt.Println("I am job-1")
+		return nil
+	}, olddelay, oldperiod)
+
+	// creating scheduler
+	sc := New()
+
+	// adding jobs to scheduler
+	err := sc.AddJobs(j1)
+	assert(t, "add jobs", err, nil)
+
+	// start jobs, cancel func will be created automatically
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+	err = sc.StartJob(ctx, cancel, j1.name)
+	assert(t, "StartJob", err, nil)
+
+	// modifying running job must cause error
+	err = sc.ModifyJobConf(j1.name, newdelay, newperiod)
+	assertNotNil(t, "modify job config", err)
+
+	// wait 10 Milliseconds
+	time.Sleep(time.Millisecond * 10)
+
+	// stopping j1
+	err = sc.StopJob(j1.Name())
+	assert(t, "stop job 1", err, nil)
+
+	// modifying stopped job must not cause error
+	err = sc.ModifyJobConf(j1.name, newdelay, newperiod)
+	assert(t, "modify job config", err, nil)
+
+	// getting j1 config
+	modifjobs := sc.JobsPool().WithStatus(StatModified)
+	assert(t, "modifjobs jobs len", len(modifjobs), 1)
+
+	// getting job-1 from pool and checking its status
+	j1 = modifjobs[j1.name]
+	assert(t, "modified data delay", j1.conf.Delay, newdelay)
+	assert(t, "modified data period", j1.conf.Period, newperiod)
+
+	// start j1, wait it and stop
+	ctx = context.Background()
+	err = sc.StartJob(ctx, nil, j1.name)
+	assert(t, "start job 1", err, nil)
+	time.Sleep(time.Millisecond * 10)
+	err = sc.StopAllJobs()
+	assert(t, "stop all jobs", err, nil)
+
+	// getting stopped jobs from pool and checking amount
+	stopped := sc.JobsPool()
+	assert(t, "empty stopped len", len(stopped), 1)
+
+	// removing all jobs from pool
+	err = sc.RemoveJob(j1.name)
+	assert(t, "remove job", err, nil)
+
+	// checking empty pool of jobs
+	emptypool := sc.JobsPool()
+	assert(t, "empty jobspool len", len(emptypool), 0)
 }
 
 func assert(t *testing.T, what string, got, exp interface{}) {
 	if got != exp {
 		t.Errorf("Error in asserting %s, got: %v, exp: %v", what, got, exp)
+	}
+}
+
+func assertNotNil(t *testing.T, what string, got interface{}) {
+	if got == nil {
+		t.Errorf("Error: expected not nil, got nil")
 	}
 }

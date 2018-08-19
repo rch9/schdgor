@@ -8,9 +8,10 @@ import (
 
 // available states of any job
 const (
-	StatReady   = "Ready"
-	StatStopped = "Stopped"
-	StatRunning = "Running"
+	StatReady    = "Ready"
+	StatStopped  = "Stopped"
+	StatRunning  = "Running"
+	StatModified = "Modified"
 )
 
 // jobConf represents timeconfig of a job
@@ -62,7 +63,6 @@ func NewJob(name string, handler func(context.Context) error, delay, period time
 		name:    string(name),
 		handler: handler,
 		conf:    jobConf{delay, period},
-		// done:    make(chan struct{}, 1),
 	}
 
 	return &j
