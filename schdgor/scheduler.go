@@ -5,18 +5,18 @@ package schdgor
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 )
 
 // jobsPool is an alias for map[string]*Job
-type jobsPool map[jobNameKey]*job
+type jobsPool map[string]*job
 
 // Scheduler manages jobs which run in gorutines
 type Scheduler struct {
 	jobsPool jobsPool
 	wg       sync.WaitGroup
+	wgjobs   sync.WaitGroup
 }
 
 // New creates new Scheduler
@@ -49,10 +49,17 @@ func (p jobsPool) WithStatus(s string) jobsPool {
 }
 
 // addJob add one job to scheduler
-func (sc *Scheduler) addJob(j *job) {
+func (sc *Scheduler) addJob(j *job) error {
+	_, ok := sc.jobsPool[j.name]
+	if ok {
+		return fmt.Errorf("job %s have already exists", j.name)
+	}
+
 	j.status = StatReady
 	sc.jobsPool[j.name] = j
 	sc.wg.Add(1)
+
+	return nil
 }
 
 // AddJobs adds pointers of jobs into scheduler jobsPool
@@ -62,14 +69,34 @@ func (sc *Scheduler) AddJobs(jobs ...*job) {
 	}
 }
 
-// StartJob runs specific job by its name
+// StartJobs runs specific jobs by their names with one context and cancel func
+func (sc *Scheduler) StartJobs(ctx context.Context,
+	cancel context.CancelFunc, jns ...string) error {
+
+	if ctx == nil {
+		return fmt.Errorf("context of jobs %v is nil", jns)
+	}
+	if cancel == nil {
+		ctx, cancel = context.WithCancel(ctx)
+	}
+
+	for _, jn := range jns {
+		err := sc.StartJob(ctx, cancel, jn)
+		if err != nil {
+			return fmt.Errorf("can not start job %s, %v", jn, err)
+		}
+	}
+	return nil
+}
+
+// startJob runs specific job by its name
 func (sc *Scheduler) StartJob(ctx context.Context,
 	cancel context.CancelFunc, jn string) error {
 
 	if ctx == nil {
 		return fmt.Errorf("context of job %s is nil", jn)
 	}
-	j, ok := sc.jobsPool[jobNameKey(jn)]
+	j, ok := sc.jobsPool[string(jn)]
 	if !ok {
 		return fmt.Errorf("can not find job %s", jn)
 	}
@@ -86,24 +113,24 @@ func (sc *Scheduler) StartJob(ctx context.Context,
 	j.cancel = cancel
 
 	// stating job in new gorutine with context
-	go startJob(ctx, j)
+	sc.wgjobs.Add(1)
+	go sc.startJob(ctx, j)
 
 	return nil
 }
 
 // TODO: check timeout in context
 // startJob starts new job and handles signals from channal
-func startJob(ctx context.Context, j *job) {
-
-	// waiting if delay > 0 or cancel
+func (sc *Scheduler) startJob(ctx context.Context, j *job) {
 	if j.conf.Delay > 0 {
 		timer := time.NewTimer(j.Conf().Delay)
 		select {
+		// FIXME: Can i close timer?
 		case <-timer.C:
 			j.handler(ctx)
-			log.Println("timer")
 		case <-ctx.Done():
-			log.Println("stopped")
+			j.stop()
+			sc.wgjobs.Done()
 			return
 		}
 	}
@@ -114,34 +141,43 @@ func startJob(ctx context.Context, j *job) {
 		select {
 		case <-ticker.C:
 			j.handler(ctx)
-			log.Println("ticker")
 		case <-ctx.Done():
-			log.Println("stopped")
 			ticker.Stop()
+			j.stop()
+			sc.wgjobs.Done()
 			return
 		}
 	}
 }
 
+func (j *job) stop() {
+	j.status = StatStopped
+	// j.done <- struct{}{}
+}
+
 // Stop stops specific job by its name
+// if jobs have same CancelFuncs then it all be closed
 func (sc *Scheduler) StopJob(jn string) error {
-	j, ok := sc.jobsPool[jobNameKey(jn)]
+	j, ok := sc.jobsPool[string(jn)]
 	if !ok {
 		return fmt.Errorf("can not find job %s", jn)
 	}
-	if j.status == StatStopped {
+	if j.status != StatRunning {
 		return fmt.Errorf("job %s has already stopped", j.name)
 	}
 
 	j.cancel()
-	j.status = StatStopped
+	sc.wgjobs.Wait()
+	// waiting finishing job
+	// <-j.done
+
 	return nil
 }
 
 // Remove removes specific job by its name
 // job must not be running
 func (sc *Scheduler) RemoveJob(jn string) error {
-	j, ok := sc.jobsPool[jobNameKey(jn)]
+	j, ok := sc.jobsPool[string(jn)]
 	if !ok {
 		return fmt.Errorf("can not find job %s", jn)
 	}
@@ -153,45 +189,33 @@ func (sc *Scheduler) RemoveJob(jn string) error {
 	return nil
 }
 
-// TODO: does not work yet
 // ModifyJobConf modifies job time configuration
-// func (sc *Scheduler) ModifyJobConf(jn string, delay, period time.Duration) error {
-// 	j, ok := sc.jobsPool[JobNameKey(jn)]
-// 	if !ok {
-// 		return fmt.Errorf("can not find job %s", jn)
-// 	}
-// 	if j.status == StatRunning {
-// 		return fmt.Errorf("job %s has already running", j.name)
-// 	}
-//
-// 	// TODO: check tests with stopped
-// 	j.SetConf(delay, period)
-//
-// 	return nil
-// }
+func (sc *Scheduler) ModifyJobConf(jn string, delay, period time.Duration) error {
+	j, ok := sc.jobsPool[string(jn)]
+	if !ok {
+		return fmt.Errorf("can not find job %s", jn)
+	}
+	if j.status == StatRunning {
+		return fmt.Errorf("job %s has already running", j.name)
+	}
+
+	j.SetConf(delay, period)
+
+	return nil
+}
 
 // // RemoveAll removes all jobs in jobsPool
-// func (sc *Scheduler) RemoveAllJobs() {
-// 	for _, j := range sc.jobsPool {
-// 		sc.RemoveJob(j.name)
-// 	}
-// }
+func (sc *Scheduler) RemoveAllJobs() {
+	for _, j := range sc.jobsPool {
+		sc.RemoveJob(j.name)
+	}
+}
 
-// TODO: does not work yet
-// // StartAll starts all jobs in jobsPool
-// func (sc *Scheduler) StopAllJobs() {
-// 	for _, j := range sc.jobsPool {
-// 		if j.status == StatRunning {
-// 			sc.StopJob(j.name)
-// 		}
-// 	}
-// }
-
-// // StartAll starts all jobs in jobsPool
-// func (sc *Scheduler) StartAllJobs() {
-// 	for _, j := range sc.jobsPool {
-// 		if j.status != StatRunning {
-// 			sc.StartJob(j.name)
-// 		}
-// 	}
-// }
+// StopAllJobs stops all running jobs in jobsPool
+func (sc *Scheduler) StopAllJobs() {
+	for _, j := range sc.jobsPool {
+		if j.status == StatRunning {
+			sc.StopJob(j.name)
+		}
+	}
+}

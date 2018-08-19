@@ -31,35 +31,35 @@ func main() {
 	sc.AddJobs(j1, j2)
 
 	// starting job-1
-	sc.StartJob(ctx, cancel, j1.Name().String())
+	sc.StartJob(ctx, cancel, j1.Name())
 	time.Sleep(time.Second * 3)
 
 	// stopping job-1
-	sc.StopJob(j1.Name().String())
+	sc.StopJob(j1.Name())
 	time.Sleep(time.Second * 3)
 
 	// creating new context because last have already used
 	ctx, cancel = context.WithCancel(context.Background())
 
 	// starting again job-1
-	err := sc.StartJob(ctx, cancel, j1.Name().String())
+	err := sc.StartJob(ctx, cancel, j1.Name())
 	if err != nil {
 		fmt.Println(err)
 	}
 	time.Sleep(time.Second * 3)
 
 	// stopping job-1
-	err = sc.StopJob(j1.Name().String())
+	err = sc.StopJob(j1.Name())
 	if err != nil {
 		fmt.Println(err)
 	}
 	time.Sleep(time.Second * 3)
 
 	// remove job-1
-	sc.RemoveJob(j1.Name().String())
+	sc.RemoveJob(j1.Name())
 
 	// remove job-2
-	sc.RemoveJob(j2.Name().String())
+	sc.RemoveJob(j2.Name())
 
 	// waiting all jobs
 	sc.WaitJobs()

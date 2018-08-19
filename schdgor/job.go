@@ -8,10 +8,9 @@ import (
 
 // available states of any job
 const (
-	StatReady    = "Ready"
-	StatStopped  = "Stopped"
-	StatRunning  = "Running"
-	StatCanceled = "Canceled"
+	StatReady   = "Ready"
+	StatStopped = "Stopped"
+	StatRunning = "Running"
 )
 
 // jobConf represents timeconfig of a job
@@ -22,26 +21,19 @@ type jobConf struct {
 	// TODO: WorkTime time.Duration
 }
 
-// jobNameKey is a type for storing job name in context value
-type jobNameKey string
-
 // job represents parameters of running gorutine
 type job struct {
-	name    jobNameKey
+	name    string
 	status  string
 	conf    jobConf
 	handler func(context.Context) error
 	cancel  context.CancelFunc
+	// done    chan struct{}
 }
 
 // Name returns job name
-func (j *job) Name() jobNameKey {
+func (j *job) Name() string {
 	return j.name
-}
-
-// String returns job name in string format
-func (jk jobNameKey) String() string {
-	return string(jk)
 }
 
 // Conf returns time config of the job
@@ -67,9 +59,10 @@ func NewJob(name string, handler func(context.Context) error, delay, period time
 	}
 
 	j := job{
-		name:    jobNameKey(name),
+		name:    string(name),
 		handler: handler,
 		conf:    jobConf{delay, period},
+		// done:    make(chan struct{}, 1),
 	}
 
 	return &j
