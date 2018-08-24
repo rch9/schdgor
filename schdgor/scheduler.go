@@ -17,6 +17,7 @@ type Scheduler struct {
 	jobsPool jobsPool
 	wg       sync.WaitGroup
 	wgjobs   sync.WaitGroup
+	mx       sync.Mutex
 }
 
 // New creates new Scheduler
@@ -29,6 +30,7 @@ func New() *Scheduler {
 
 // WaitJobs force scheduler wait gorutines
 func (sc *Scheduler) WaitJobs() {
+	// NOTE: needed mutex?
 	sc.wg.Wait()
 }
 
@@ -50,6 +52,8 @@ func (p jobsPool) WithStatus(s string) jobsPool {
 
 // addJob add one job to scheduler
 func (sc *Scheduler) addJob(j *job) error {
+	sc.mx.Lock()
+	defer sc.mx.Unlock()
 	_, ok := sc.jobsPool[j.name]
 	if ok {
 		return fmt.Errorf("job %s have already exists", j.name)
@@ -101,6 +105,9 @@ func (sc *Scheduler) StartJobs(ctx context.Context,
 func (sc *Scheduler) StartJob(ctx context.Context,
 	cancel context.CancelFunc, jn string) error {
 
+	sc.mx.Lock()
+	defer sc.mx.Unlock()
+
 	if ctx == nil {
 		return fmt.Errorf("context of job %s is nil", jn)
 	}
@@ -137,6 +144,7 @@ func (sc *Scheduler) startJob(ctx context.Context, j *job) {
 		case <-timer.C:
 			j.handler(ctx)
 		case <-ctx.Done():
+			// NOTE: need mutex ?
 			sc.closeJob(j)
 			return
 		}
@@ -165,6 +173,9 @@ func (sc *Scheduler) closeJob(j *job) {
 // Stop stops specific job by its name
 // if jobs have same CancelFuncs then it all be closed
 func (sc *Scheduler) StopJob(jn string) error {
+	sc.mx.Lock()
+	defer sc.mx.Unlock()
+
 	j, ok := sc.jobsPool[string(jn)]
 	if !ok {
 		return fmt.Errorf("can not find job %s", jn)
@@ -182,6 +193,9 @@ func (sc *Scheduler) StopJob(jn string) error {
 // Remove removes specific job by its name
 // job must not be running
 func (sc *Scheduler) RemoveJob(jn string) error {
+	sc.mx.Lock()
+	defer sc.mx.Unlock()
+
 	j, ok := sc.jobsPool[string(jn)]
 	if !ok {
 		return fmt.Errorf("can not find job %s", jn)
@@ -197,6 +211,9 @@ func (sc *Scheduler) RemoveJob(jn string) error {
 // ModifyJobConf modifies job time configuration
 // job status changes to modified
 func (sc *Scheduler) ModifyJobConf(jn string, delay, period time.Duration) error {
+	sc.mx.Lock()
+	defer sc.mx.Unlock()
+
 	j, ok := sc.jobsPool[string(jn)]
 	if !ok {
 		return fmt.Errorf("can not find job %s", jn)
